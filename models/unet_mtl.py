@@ -109,15 +109,21 @@ class Up(nn.Module):
         #     self.conv = DoubleConv(in_channels, out_channels // 2, in_channels // 2)
         if mtl:
             # self.up = ConvTranspose2dMtl(in_channels , in_channels, 2, 2)
-            self.up = nn.UpsamplingBilinear2d(scale_factor=2)
+            # self.up = nn.UpsamplingBilinear2d(scale_factor=2)
             self.conv = DoubleConvMtl(in_channels, out_channels)
         else:
             # self.up = nn.ConvTranspose2d(in_channels , in_channels, kernel_size=2, stride=2)
-            self.up = nn.UpsamplingBilinear2d(scale_factor=2)
+            # self.up = nn.UpsamplingBilinear2d(scale_factor=2)
             self.conv = DoubleConv(in_channels, out_channels)
     def forward(self, x1, x2):
         """自己定义的上采样"""
-        outputs = torch.cat([self.up(x1),x2],1)
+        # print("x1_size:",str(x1.shape))
+        # print("x2_size:",str(x2.shape))
+        up = nn.UpsamplingBilinear2d(size=(x2.shape[2:]))
+        x1 = up(x1)
+
+        # print("上采样之后的size:",str(x1.shape))
+        outputs = torch.cat([x1,x2],1)
         outputs = self.conv(outputs)
         return outputs
 
@@ -139,81 +145,84 @@ class UNetMtl(nn.Module):
     def __init__(self, n_channels, n_classes, mtl=True):
         super(UNetMtl, self).__init__()
         #************************
-        self.x5_dem_1 = nn.Sequential(nn.Conv2d(512, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        #MSU单元
+        channel_count = 32
+        self.conv_3 = CNN1(channel_count,3,1)
+        self.conv_5 = CNN1(channel_count, 5, 2)
+
+        self.x5_dem_1 = nn.Sequential(nn.Conv2d(256, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                       nn.ReLU(inplace=True))
-        self.x4_dem_1 = nn.Sequential(nn.Conv2d(512, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x4_dem_1 = nn.Sequential(nn.Conv2d(256, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                       nn.ReLU(inplace=True))
-        self.x3_dem_1 = nn.Sequential(nn.Conv2d(256, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x3_dem_1 = nn.Sequential(nn.Conv2d(128, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                       nn.ReLU(inplace=True))
-        self.x2_dem_1 = nn.Sequential(nn.Conv2d(128, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x2_dem_1 = nn.Sequential(nn.Conv2d(64, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                       nn.ReLU(inplace=True))
-        self.x5_x4 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x5_x4 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                    nn.ReLU(inplace=True))
-        self.x4_x3 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x4_x3 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                    nn.ReLU(inplace=True))
-        self.x3_x2 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x3_x2 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                    nn.ReLU(inplace=True))
-        self.x2_x1 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x2_x1 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                    nn.ReLU(inplace=True))
 
-        self.x5_x4_x3 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x5_x4_x3 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                       nn.ReLU(inplace=True))
-        self.x4_x3_x2 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x4_x3_x2 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                       nn.ReLU(inplace=True))
-        self.x3_x2_x1 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x3_x2_x1 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                       nn.ReLU(inplace=True))
 
-        self.x5_x4_x3_x2 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x5_x4_x3_x2 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                          nn.ReLU(inplace=True))
-        self.x4_x3_x2_x1 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x4_x3_x2_x1 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                          nn.ReLU(inplace=True))
-        self.x5_dem_4 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x5_dem_4 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                       nn.ReLU(inplace=True))
-        self.x5_x4_x3_x2_x1 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x5_x4_x3_x2_x1 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                             nn.ReLU(inplace=True))
 
-        self.level3 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.level3 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                     nn.ReLU(inplace=True))
-        self.level2 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.level2 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                     nn.ReLU(inplace=True))
-        self.level1 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.level1 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                     nn.ReLU(inplace=True))
-        self.x5_dem_5 = nn.Sequential(nn.Conv2d(512, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.x5_dem_5 = nn.Sequential(nn.Conv2d(256, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                       nn.ReLU(inplace=True))
-        self.output4 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.output4 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                      nn.ReLU(inplace=True))
-        self.output3 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.output3 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                      nn.ReLU(inplace=True))
-        self.output2 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),
+        self.output2 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1), nn.BatchNorm2d(channel_count),
                                      nn.ReLU(inplace=True))
-        self.output1 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, padding=1))
+        self.output1 = nn.Sequential(nn.Conv2d(channel_count, channel_count, kernel_size=3, padding=1))
         # ************************
         self.n_channels = n_channels
         self.n_classes = n_classes
-        bilinear = False
         self.mtl = mtl
         if mtl:
-            self.inc = DoubleConvMtl(n_channels, 64)
+            self.inc = DoubleConvMtl(n_channels, 32)
         else:
-            self.inc = DoubleConv(n_channels, 64)
+            self.inc = DoubleConv(n_channels, 32)
             
-        self.down1 = Down(64, 128, mtl)
+        self.down1 = Down(32, 64, mtl)
 
-        self.down2 = Down(128, 256, mtl)
+        self.down2 = Down(64, 128, mtl)
 
-        self.down3 = Down(256, 512, mtl)
-        factor = 2 if bilinear else 1
+        self.down3 = Down(128, 256, mtl)
 
-        self.down4 = Down(512, 512, mtl)
+        self.down4 = Down(256, 256, mtl)
         # self.up1 = Up(64, 512, mtl)
         # self.up2 = Up(64, 256, mtl)
         # self.up3 = Up(64, 128, mtl)
         # self.up4 = Up(64, 64 * factor, mtl)
-        self.up1 = Up(128, 64, mtl)
-        self.up2 = Up(128, 64, mtl)
-        self.up3 = Up(128, 64, mtl)
-        self.up4 = Up(128, 64, mtl)
-        self.outc = OutConv(64, n_classes, mtl)
+        self.up1 = Up(64, 32, mtl)
+        self.up2 = Up(64, 32, mtl)
+        self.up3 = Up(64, 32, mtl)
+        self.up4 = Up(64, 32, mtl)
+        self.outc = OutConv(32, n_classes, mtl)
 
 
 
@@ -235,31 +244,92 @@ class UNetMtl(nn.Module):
         x5 = self.down4(x4)
         # print("x5的尺寸：" + str(x5.shape))
 
-        #将第五层到第二层全部转化为64通道，这是第一列
+        #将第五层到第二层全部转化为32通道，这是第一列
         x5_dem_1 = self.x5_dem_1(x5)
         x4_dem_1 = self.x4_dem_1(x4)
         x3_dem_1 = self.x3_dem_1(x3)
         x2_dem_1 = self.x2_dem_1(x2)
 
         #这是第二列
-        x5_4 = self.x5_x4(abs(F.upsample(x5_dem_1, size=x4.size()[2:], mode='bilinear') - x4_dem_1))
-        x4_3 = self.x4_x3(abs(F.upsample(x4_dem_1, size=x3.size()[2:], mode='bilinear') - x3_dem_1))
-        x3_2 = self.x3_x2(abs(F.upsample(x3_dem_1, size=x2.size()[2:], mode='bilinear') - x2_dem_1))
-        x2_1 = self.x2_x1(abs(F.upsample(x2_dem_1, size=x1.size()[2:], mode='bilinear') - x1))
+        x5_dem_1_up = F.upsample(x5_dem_1, size=x4.size()[2:], mode='bilinear')
+        x5_dem_1_up_map1 = self.conv_3(x5_dem_1_up)
+        x4_dem_1_map1 = self.conv_3(x4_dem_1)
+        x5_dem_1_up_map2 = self.conv_5(x5_dem_1_up)
+        x4_dem_1_map2 = self.conv_5(x4_dem_1)
+        x5_4 = self.x5_x4(
+            abs(x5_dem_1_up - x4_dem_1) + abs(x5_dem_1_up_map1 - x4_dem_1_map1) + abs(x5_dem_1_up_map2 - x4_dem_1_map2))
+
+        x4_dem_1_up = F.upsample(x4_dem_1, size=x3.size()[2:], mode='bilinear')
+        x4_dem_1_up_map1 = self.conv_3(x4_dem_1_up)
+        x3_dem_1_map1 = self.conv_3(x3_dem_1)
+        x4_dem_1_up_map2 = self.conv_5(x4_dem_1_up)
+        x3_dem_1_map2 = self.conv_5(x3_dem_1)
+        x4_3 = self.x4_x3(
+            abs(x4_dem_1_up - x3_dem_1) + abs(x4_dem_1_up_map1 - x3_dem_1_map1) + abs(x4_dem_1_up_map2 - x3_dem_1_map2))
+
+        x3_dem_1_up = F.upsample(x3_dem_1, size=x2.size()[2:], mode='bilinear')
+        x3_dem_1_up_map1 = self.conv_3(x3_dem_1_up)
+        x2_dem_1_map1 = self.conv_3(x2_dem_1)
+        x3_dem_1_up_map2 = self.conv_5(x3_dem_1_up)
+        x2_dem_1_map2 = self.conv_5(x2_dem_1)
+        x3_2 = self.x3_x2(
+            abs(x3_dem_1_up - x2_dem_1) + abs(x3_dem_1_up_map1 - x2_dem_1_map1) + abs(x3_dem_1_up_map2 - x2_dem_1_map2))
+
+        x2_dem_1_up = F.upsample(x2_dem_1, size=x1.size()[2:], mode='bilinear')
+        x2_dem_1_up_map1 = self.conv_3(x2_dem_1_up)
+        x1_map1 = self.conv_3(x1)
+        x2_dem_1_up_map2 = self.conv_5(x2_dem_1_up)
+        x1_map2 = self.conv_5(x1)
+        x2_1 = self.x2_x1(abs(x2_dem_1_up - x1) + abs(x2_dem_1_up_map1 - x1_map1) + abs(x2_dem_1_up_map2 - x1_map2))
 
         #这是第三列
-        x5_4_3 = self.x5_x4_x3(abs(F.upsample(x5_4, size=x4_3.size()[2:], mode='bilinear') - x4_3))
-        x4_3_2 = self.x4_x3_x2(abs(F.upsample(x4_3, size=x3_2.size()[2:], mode='bilinear') - x3_2))
-        x3_2_1 = self.x3_x2_x1(abs(F.upsample(x3_2, size=x2_1.size()[2:], mode='bilinear') - x2_1))
+        x5_4_up = F.upsample(x5_4, size=x4_3.size()[2:], mode='bilinear')
+        x5_4_up_map1 = self.conv_3(x5_4_up)
+        x4_3_map1 = self.conv_3(x4_3)
+        x5_4_up_map2 = self.conv_5(x5_4_up)
+        x4_3_map2 = self.conv_5(x4_3)
+        x5_4_3 = self.x5_x4_x3(abs(x5_4_up - x4_3) + abs(x5_4_up_map1 - x4_3_map1) + abs(x5_4_up_map2 - x4_3_map2))
+
+        x4_3_up = F.upsample(x4_3, size=x3_2.size()[2:], mode='bilinear')
+        x4_3_up_map1 = self.conv_3(x4_3_up)
+        x3_2_map1 = self.conv_3(x3_2)
+        x4_3_up_map2 = self.conv_5(x4_3_up)
+        x3_2_map2 = self.conv_5(x3_2)
+        x4_3_2 = self.x4_x3_x2(abs(x4_3_up - x3_2) + abs(x4_3_up_map1 - x3_2_map1) + abs(x4_3_up_map2 - x3_2_map2))
+
+        x3_2_up = F.upsample(x3_2, size=x2_1.size()[2:], mode='bilinear')
+        x3_2_up_map1 = self.conv_3(x3_2_up)
+        x2_1_map1 = self.conv_3(x2_1)
+        x3_2_up_map2 = self.conv_5(x3_2_up)
+        x2_1_map2 = self.conv_5(x2_1)
+        x3_2_1 = self.x3_x2_x1(abs(x3_2_up - x2_1) + abs(x3_2_up_map1 - x2_1_map1) + abs(x3_2_up_map2 - x2_1_map2))
 
         #这是第四列
-        x5_4_3_2 = self.x5_x4_x3_x2(abs(F.upsample(x5_4_3, size=x4_3_2.size()[2:], mode='bilinear') - x4_3_2))
-        x4_3_2_1 = self.x4_x3_x2_x1(abs(F.upsample(x4_3_2, size=x3_2_1.size()[2:], mode='bilinear') - x3_2_1))
+        x5_4_3_up = F.upsample(x5_4_3, size=x4_3_2.size()[2:], mode='bilinear')
+        x5_4_3_up_map1 = self.conv_3(x5_4_3_up)
+        x4_3_2_map1 = self.conv_3(x4_3_2)
+        x5_4_3_up_map2 = self.conv_5(x5_4_3_up)
+        x4_3_2_map2 = self.conv_5(x4_3_2)
+        x5_4_3_2 = self.x5_x4_x3_x2(
+            abs(x5_4_3_up - x4_3_2) + abs(x5_4_3_up_map1 - x4_3_2_map1) + abs(x5_4_3_up_map2 - x4_3_2_map2))
+
+        x4_3_2_up = F.upsample(x4_3_2, size=x3_2_1.size()[2:], mode='bilinear')
+        x4_3_2_up_map1 = self.conv_3(x4_3_2_up)
+        x3_2_1_map1 = self.conv_3(x3_2_1)
+        x4_3_2_up_map2 = self.conv_5(x4_3_2_up)
+        x3_2_1_map2 = self.conv_5(x3_2_1)
+        x4_3_2_1 = self.x4_x3_x2_x1(
+            abs(x4_3_2_up - x3_2_1) + abs(x4_3_2_up_map1 - x3_2_1_map1) + abs(x4_3_2_up_map2 - x3_2_1_map2))
 
         #这是第五列
         x5_dem_4 = self.x5_dem_4(x5_4_3_2)
+        x5_dem_4_up = F.upsample(x5_dem_4, size=x4_3_2_1.size()[2:], mode='bilinear')
+        x5_dem_4_up_map1 = self.conv_3(x5_dem_4_up)
+        x4_3_2_1_map1 = self.conv_3(x4_3_2_1)
+        x5_dem_4_up_map2 = self.conv_5(x5_dem_4_up)
+        x4_3_2_1_map2 = self.conv_5(x4_3_2_1)
         x5_4_3_2_1 = self.x5_x4_x3_x2_x1(
-            abs(F.upsample(x5_dem_4, size=x4_3_2_1.size()[2:], mode='bilinear') - x4_3_2_1))
+            abs(x5_dem_4_up - x4_3_2_1) + abs(x5_dem_4_up_map1 - x4_3_2_1_map1) + abs(x5_dem_4_up_map2 - x4_3_2_1_map2))
 
         #汇聚所有的层，level5就是x5_dem_5
         level4 = x5_4
@@ -268,6 +338,7 @@ class UNetMtl(nn.Module):
         level1 = self.level1(x2_1 + x3_2_1 + x4_3_2_1 + x5_4_3_2_1)
 
         x5_dem_5 = self.x5_dem_5(x5)
+
         output4 = self.output4(F.upsample(x5_dem_5, size=level4.size()[2:], mode='bilinear') + level4)
         output3 = self.output3(F.upsample(output4, size=level3.size()[2:], mode='bilinear') + level3)
         output2 = self.output2(F.upsample(output3, size=level2.size()[2:], mode='bilinear') + level2)
@@ -276,9 +347,9 @@ class UNetMtl(nn.Module):
         x = self.up1(x5_dem_5, output4)
         x = self.up2(x, output3)
         x = self.up3(x, output2)
-        print("x:" + str(x.size()))
-        print("output1:" + str(output1.size()))
+
         x = self.up4(x, output1)
+
         logits = self.outc(x)
         return logits
         # output4 = self.output4(F.upsample(x5_dem_5, size=level4.size()[2:], mode='bilinear') + level4)
